@@ -31,16 +31,38 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Create debug keystore
+      - name: Setup Release Keystore
         run: |
+          # Создаём keystore из секрета или генерируем постоянный
           mkdir -p ~/.android
-          keytool -genkey -v -keystore ~/.android/debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ~/.android/release.keystore
+          else
+            # Используем фиксированные данные для генерации одинакового ключа
+            keytool -genkey -v \
+              -keystore ~/.android/release.keystore \
+              -alias cardvault \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass cardvault2024 \
+              -keypass cardvault2024 \
+              -dname "CN=CardVault, OU=Mobile, O=CardVault, L=Tashkent, ST=Tashkent, C=UZ"
+            # Выводим keystore в base64 для сохранения в секреты
+            echo "::warning::Keystore создан. Сохраните base64 в GitHub Secrets как KEYSTORE_BASE64:"
+            base64 -w 0 ~/.android/release.keystore
+            echo ""
+          fi
 
       - name: Build Release APK
         run: ./gradlew assembleRelease
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'cardvault2024' }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'cardvault' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'cardvault2024' }}
 
       - name: Rename APK
-        run: mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/CardVault.apk
+        run: mv app/build/outputs/apk/release/app-release-unsigned.apk app/build/outputs/apk/release/CardVault.apk 2>/dev/null || mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/CardVault.apk
 
       - name: Get version
         id: version
